@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { TextLoop } from './TextLoop';
 
 export default function Home() {
   const mountRef = useRef(null);
@@ -13,13 +14,18 @@ export default function Home() {
     const scene = new THREE.Scene();
 
     // Camera
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 10;
+    const camera = new THREE.PerspectiveCamera(75, 400 / 400, 0.1, 500);
+    camera.position.z = 5;
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0x000000, 1);
+    // Renderer with antialiasing enabled
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: true,
+      powerPreference: "high-performance"
+    });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(400, 400);
+    renderer.setClearColor(0x0a0a0a, 1);
     mount.appendChild(renderer.domElement);
 
     // Create a triangle geometry with wider spacing
@@ -31,12 +37,29 @@ export default function Home() {
     ]);
     geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
 
-    // Material with wireframe to show only the border
-    const material = new THREE.LineBasicMaterial({ color: 0xffffff });
+    // Material with thicker lines
+    const material = new THREE.LineBasicMaterial({ 
+      color: 0xffffff,
+    });
+
+    // Create multiple overlapping lines for thicker appearance
+    const createThickLine = (geometry) => {
+      const group = new THREE.Group();
+      // Create more overlapping lines for thicker appearance
+      for(let i = 0; i < 24; i++) { // Increased from 12 to 24 overlapping lines
+        const line = new THREE.LineSegments(geometry, material);
+        // Create a spread pattern in both x and y directions
+        line.position.x = (i % 4 - 1.5) * 0.003; // Increased spread and grid size
+        line.position.y = (Math.floor(i / 4) - 1.5) * 0.003;
+        line.position.z = i * 0.001;
+        group.add(line);
+      }
+      return group;
+    };
 
     // Create the triangle edges
     const edges = new THREE.EdgesGeometry(geometry);
-    const triangle = new THREE.LineSegments(edges, material);
+    const triangle = createThickLine(edges);
     scene.add(triangle);
 
     // Create vertex points
@@ -105,7 +128,7 @@ export default function Home() {
           centerPoint.position.x, centerPoint.position.y, centerPoint.position.z
         ]);
         lineGeometry.setAttribute('position', new THREE.BufferAttribute(lineVertices, 3));
-        const line = new THREE.Line(lineGeometry, material);
+        const line = createThickLine(lineGeometry);
         scene.add(line);
         lines.push(line);
         lineGeometries.push(lineGeometry);
@@ -121,8 +144,8 @@ export default function Home() {
       geometry.attributes.position.needsUpdate = true;
       
       const newEdges = new THREE.EdgesGeometry(geometry);
-      triangle.geometry.dispose();
-      triangle.geometry = newEdges;
+      triangle.children.forEach(line => line.geometry.dispose());
+      triangle.children.forEach(line => line.geometry = newEdges);
     };
 
     // Initialize lines
@@ -198,11 +221,37 @@ export default function Home() {
 
     // Handle window resize
     const handleResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.aspect = 500 / 500;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(500, 500);
+      renderer.setPixelRatio(window.devicePixelRatio);
     };
     window.addEventListener('resize', handleResize);
+
+    // Handle mouse hover
+    const handleMouseEnter = () => {
+      isAnimating = false;
+      
+      // Return all points to original positions
+      spheres.forEach((sphere) => {
+        sphere.isAnimating = true;
+        sphere.targetPosition.copy(sphere.originalPosition);
+        sphere.velocity.set(0, 0, 0);
+      });
+      
+      centerPoint.isAnimating = true;
+      targetPosition.set(-0.5, -1, 0);
+      velocity.set(0, 0, 0);
+    };
+
+    const handleMouseLeave = () => {
+      isAnimating = true;
+      animationCounter = 0;
+      startRandomAnimation();
+    };
+
+    mount.addEventListener('mouseenter', handleMouseEnter);
+    mount.addEventListener('mouseleave', handleMouseLeave);
 
     // Animation loop
     let velocity = new THREE.Vector3(0, 0, 0);
@@ -211,7 +260,7 @@ export default function Home() {
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
 
-      if (centerPoint.isAnimating && isAnimating) {
+      if (centerPoint.isAnimating) {
         const elapsed = Date.now() - animationStartTime;
         const progress = Math.min(elapsed / animationDuration, 1);
 
@@ -236,7 +285,7 @@ export default function Home() {
 
         updateLines();
 
-        if (progress > 0.95) {
+        if (progress > 0.95 && isAnimating) {
           startRandomAnimation();
         }
       }
@@ -249,19 +298,65 @@ export default function Home() {
     return () => {
       isAnimating = false;
       window.removeEventListener('resize', handleResize);
+      mount.removeEventListener('mouseenter', handleMouseEnter);
+      mount.removeEventListener('mouseleave', handleMouseLeave);
       cancelAnimationFrame(animationFrameId);
       mount.removeChild(renderer.domElement);
       geometry.dispose();
       material.dispose();
-      lines.forEach(line => line.geometry.dispose());
+      lines.forEach(line => {
+        line.children.forEach(child => child.geometry.dispose());
+      });
       lineGeometries.forEach(geo => geo.dispose());
-      triangle.geometry.dispose();
+      triangle.children.forEach(child => child.geometry.dispose());
     };
   }, []);
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <div ref={mountRef} className="w-full h-full"></div>
+    <div className="flex items-center justify-center min-h-screen w-full">
+      <div ref={mountRef} className="w-[400px] h-[400px]"></div>
+      <div className="mt-4 relative">
+        <p className='inline-flex whitespace-pre-wrap text-sm'>
+          Actorize{''}
+          <span className="inline-block relative" style={{width: '100px'}}> {/* Fixed width container */}
+            <TextLoop
+              className='absolute left-0 top-0 overflow-hidden'
+              transition={{
+                type: 'spring',
+                stiffness: 900,
+                damping: 80,
+                mass: 10,
+              }}
+              variants={{
+                initial: {
+                  y: 20,
+                  rotateX: 90,
+                  opacity: 0,
+                  filter: 'blur(4px)',
+                },
+                animate: {
+                  y: 0,
+                  rotateX: 0,
+                  opacity: 1,
+                  filter: 'blur(0px)',
+                },
+                exit: {
+                  y: -20,
+                  rotateX: -90,
+                  opacity: 0,
+                  filter: 'blur(4px)',
+                },
+              }}
+            >
+              <span className="block">Instagram</span>
+              <span className="block">TikTok</span>
+              <span className="block">Facebook</span>
+              <span className="block">Google Maps</span>
+            </TextLoop>
+          </span>
+          
+        </p>
+      </div>
     </div>
-  );
+  )
 }
