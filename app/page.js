@@ -2,6 +2,9 @@
 
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry';
+import { Line2 } from 'three/examples/jsm/lines/Line2';
 import { TextLoop } from './TextLoop';
 
 export default function Home() {
@@ -37,29 +40,24 @@ export default function Home() {
     ]);
     geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
 
-    // Material with thicker lines
-    const material = new THREE.LineBasicMaterial({ 
+    // Line material and geometry for thick lines
+    const lineMaterial = new LineMaterial({
       color: 0xffffff,
+      linewidth: 2,
+      dashed: false,
     });
 
-    // Create multiple overlapping lines for thicker appearance
-    const createThickLine = (geometry) => {
-      const group = new THREE.Group();
-      // Create more overlapping lines for thicker appearance
-      for(let i = 0; i < 24; i++) { // Increased from 12 to 24 overlapping lines
-        const line = new THREE.LineSegments(geometry, material);
-        // Create a spread pattern in both x and y directions
-        line.position.x = (i % 4 - 1.5) * 0.003; // Increased spread and grid size
-        line.position.y = (Math.floor(i / 4) - 1.5) * 0.003;
-        line.position.z = i * 0.001;
-        group.add(line);
-      }
-      return group;
-    };
+    lineMaterial.resolution.set(window.innerWidth, window.innerHeight);
 
-    // Create the triangle edges
-    const edges = new THREE.EdgesGeometry(geometry);
-    const triangle = createThickLine(edges);
+    const lineGeometry = new LineGeometry();
+    lineGeometry.setPositions([
+      0.0,  2.0, 0.0,
+      -2.0, -2.0, 0.0,
+      2.0, -2.0, 0.0,
+      0.0,  2.0, 0.0, // Close the triangle by connecting back to first point
+    ]);
+
+    const triangle = new Line2(lineGeometry, lineMaterial);
     scene.add(triangle);
 
     // Create vertex points
@@ -122,30 +120,25 @@ export default function Home() {
 
       // Create new lines
       spheres.forEach(sphere => {
-        const lineGeometry = new THREE.BufferGeometry();
-        const lineVertices = new Float32Array([
+        const lineGeom = new LineGeometry();
+        lineGeom.setPositions([
           sphere.position.x, sphere.position.y, sphere.position.z,
           centerPoint.position.x, centerPoint.position.y, centerPoint.position.z
         ]);
-        lineGeometry.setAttribute('position', new THREE.BufferAttribute(lineVertices, 3));
-        const line = createThickLine(lineGeometry);
+        const line = new Line2(lineGeom, lineMaterial);
         scene.add(line);
         lines.push(line);
-        lineGeometries.push(lineGeometry);
+        lineGeometries.push(lineGeom);
       });
 
-      // Update triangle edges
-      const triangleVertices = new Float32Array([
+      // Update triangle
+      const trianglePositions = [
         spheres[0].position.x, spheres[0].position.y, spheres[0].position.z,
         spheres[1].position.x, spheres[1].position.y, spheres[1].position.z,
         spheres[2].position.x, spheres[2].position.y, spheres[2].position.z,
-      ]);
-      geometry.setAttribute('position', new THREE.BufferAttribute(triangleVertices, 3));
-      geometry.attributes.position.needsUpdate = true;
-      
-      const newEdges = new THREE.EdgesGeometry(geometry);
-      triangle.children.forEach(line => line.geometry.dispose());
-      triangle.children.forEach(line => line.geometry = newEdges);
+        spheres[0].position.x, spheres[0].position.y, spheres[0].position.z, // Close the triangle
+      ];
+      lineGeometry.setPositions(trianglePositions);
     };
 
     // Initialize lines
@@ -225,6 +218,7 @@ export default function Home() {
       camera.updateProjectionMatrix();
       renderer.setSize(500, 500);
       renderer.setPixelRatio(window.devicePixelRatio);
+      lineMaterial.resolution.set(window.innerWidth, window.innerHeight);
     };
     window.addEventListener('resize', handleResize);
 
@@ -303,12 +297,10 @@ export default function Home() {
       cancelAnimationFrame(animationFrameId);
       mount.removeChild(renderer.domElement);
       geometry.dispose();
-      material.dispose();
-      lines.forEach(line => {
-        line.children.forEach(child => child.geometry.dispose());
-      });
+      lineMaterial.dispose();
+      lineGeometry.dispose();
+      lines.forEach(line => line.geometry.dispose());
       lineGeometries.forEach(geo => geo.dispose());
-      triangle.children.forEach(child => child.geometry.dispose());
     };
   }, []);
 
@@ -320,33 +312,8 @@ export default function Home() {
           Actorize{''}
           <span className="inline-block relative" style={{width: '100px'}}> {/* Fixed width container */}
             <TextLoop
-              className='absolute left-0 top-0 overflow-hidden'
-              transition={{
-                type: 'spring',
-                stiffness: 900,
-                damping: 80,
-                mass: 10,
-              }}
-              variants={{
-                initial: {
-                  y: 20,
-                  rotateX: 90,
-                  opacity: 0,
-                  filter: 'blur(4px)',
-                },
-                animate: {
-                  y: 0,
-                  rotateX: 0,
-                  opacity: 1,
-                  filter: 'blur(0px)',
-                },
-                exit: {
-                  y: -20,
-                  rotateX: -90,
-                  opacity: 0,
-                  filter: 'blur(4px)',
-                },
-              }}
+              className="relative inline-block"
+              interval={1.9}
             >
               <span className="block">Instagram</span>
               <span className="block">TikTok</span>
